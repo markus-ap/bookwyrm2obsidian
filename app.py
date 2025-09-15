@@ -1,5 +1,9 @@
 import requests, json
 
+global_headers = {
+    "Accept": "application/ld+json; charset=utf-8'"
+}
+
 def get_user(user_name: str) -> dict:
     split= user_name.split("@")
     user, instance = split[1], split[-1]
@@ -14,10 +18,10 @@ def get_user(user_name: str) -> dict:
             actor_url = link["href"]
             break
     
-    actor_object = json.loads(requests.get(actor_url, headers={"Accept": "application/ld+json"}).text)
+    actor_object = json.loads(requests.get(actor_url, headers=global_headers).text)
 
     actor_outbox = actor_object["outbox"]
-    outbox_object = json.loads(requests.get(actor_outbox, headers={"Accept": "application/ld+json"}).text)
+    outbox_object = json.loads(requests.get(actor_outbox, headers=global_headers).text)
 
     first_index = int(outbox_object["first"].split("?page=")[-1])
     last_index = int(outbox_object["last"].split("?page=")[-1]) + 1
@@ -26,21 +30,26 @@ def get_user(user_name: str) -> dict:
 
     for index in range(first_index, last_index):
         outbox_page_url = f"{actor_outbox}?page={index}"
-        outbox = json.loads(requests.get(outbox_page_url, headers={"Accept": "application/ld+json"}).text)
+        print(outbox_page_url)
+        outbox = json.loads(requests.get(outbox_page_url, headers=global_headers).text)
 
         for item in outbox["orderedItems"]:
-            if item["type"] != "Note": continue
-            attachment = item["attachment"][0]
-            
-            book_url = item["tag"][0]["href"]
-            book_object = json.loads(requests.get(book_url, headers={"Accept": "application/ld+json"}).text)
+            if item["type"] != "Article": continue
+            if "inReplyToBook" not in item: continue
+
+            book_url = item["inReplyToBook"]
+            book_response = requests.get(book_url, headers=global_headers)
+            book_object = book_response.json()
 
             title = book_object["title"]
+
             languages = book_object["languages"]
             series = book_object["series"]
             image = book_object["cover"]["url"]
             isbn = book_object["isbn13"]
-            date = item["published"].split("T")[0]
+            date = f"#{item['published'].split('T')[0].replace('-', '/')}"
+            
+            review = item["content"]
 
             obsidian_book = {
                 "title": title,
@@ -49,23 +58,22 @@ def get_user(user_name: str) -> dict:
                 "image": image,
                 "isbn": isbn,
                 "date": date,
-                "authors": list()
+                "authors": list(),
+                "review": review
             }
 
             author_urls = book_object["authors"]
 
             for author_url in author_urls:
-                author_object = json.loads(requests.get(author_url, headers={"Accept": "application/ld+json"}).text)
+                author_object = json.loads(requests.get(author_url, headers=global_headers).text)
                 obsidian_book["authors"].append(author_object["name"])
 
-            print(json.dumps(obsidian_book, indent=4))
+            reviews.append(obsidian_book)
 
-            break
-        break
+    for review in reviews:
+        print(review["title"])
 
         
-
-
 
 
 if __name__ == "__main__":
